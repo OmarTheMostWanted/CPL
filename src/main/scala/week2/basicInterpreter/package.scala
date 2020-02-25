@@ -126,11 +126,19 @@ package object basicInterpreter {
           list match {
             case Nil => throw new RuntimeException()
             case SSym("if") :: c :: t :: e :: Nil => IfExt(parse(c), parse(t), parse(e)) //?
-            case SSym("cond") :: branchs => {
-              branchs match {
-                case Nil => throw new RuntimeException()
-              }
-            }
+//            case SSym("cond") :: branchs => {
+//              branchs match {
+//                case Nil => throw new RuntimeException()
+//
+//              }
+//            }
+//            case SSym("list") :: l => {
+//              l match {
+//                case Nil => throw new RuntimeException()
+//                case a :: Nil => ListExt
+//                case a :: b :: c => ListExt(parse(a) :: parse(b))
+//              }
+//            }
             case SSym(s) :: e :: Nil => UnOpExt(s, parse(e))
             case SSym(s) :: l :: r :: Nil => BinOpExt(s, parse(l), parse(r))
           }
