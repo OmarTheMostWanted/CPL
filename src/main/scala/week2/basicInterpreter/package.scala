@@ -69,6 +69,8 @@ package object basicInterpreter {
 
   case class IsListC(e: ExprC) extends ExprC
 
+  case class UndefinedC() extends ExprC
+
 
   //Values
   sealed abstract class Value
