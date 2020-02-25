@@ -215,11 +215,6 @@ class Test extends FunSuite {
     }
   }
 
-  test("Catch erroneous parse behavior") {
-    intercept[ParseException] {
-      parse("()")
-    }
-  }
 
   test("Catch erroneous interp behavior") {
     intercept[InterpException] {

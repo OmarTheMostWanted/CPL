@@ -2,7 +2,6 @@ package week2
 
 import scala.util.parsing.combinator._
 
-
 package object basicInterpreter {
 
   //S-Expressions
@@ -89,13 +88,17 @@ package object basicInterpreter {
   case class ConsV(head: Value, tail: Value) extends Value
 
   //exceptions
-  class ParseException(msg: String = null) extends Exception
+  abstract class ParseException(msg: String = null) extends Exception
 
-  class DesugarException(msg: String = null) extends RuntimeException
+  class CustomParseException(msg: String = null) extends ParseException
 
-  abstract class InterpException(msg: String = null) extends RuntimeException
+  abstract class DesugarException(msg: String = null) extends Exception
 
-  case class NotImplementedException(s: String) extends RuntimeException(s)
+  class CustomDesugarException(msg: String = null) extends DesugarException
+
+  abstract class InterpException(msg: String = null) extends Exception
+
+  class CustomInterpException(msg: String = null) extends InterpException
 
 
   //takes in the syntax and generates S-Expressions syntax
@@ -127,7 +130,7 @@ package object basicInterpreter {
       list match {
         case SList(SSym("else") :: e :: Nil) :: Nil => Nil
         case SList(c :: t :: Nil) :: b => (parse(c), parse(t)) :: makeCondEExtList(b)
-        case _ => throw new RuntimeException("3")
+        case _ => throw new CustomParseException("Wrong Branch format")
       }
     }
 
@@ -137,10 +140,10 @@ package object basicInterpreter {
 
     def makeCondExtList(list: List[SExpr]): List[(ExprExt, ExprExt)] = {
       list match {
-        case Nil => throw new RuntimeException("6")
+        case Nil => throw new CustomParseException("Wrong Branch format")
         case SList(c :: t :: Nil) :: Nil => (parse(c), parse(t)) :: Nil
         case SList(c :: t :: Nil) :: b => (parse(c), parse(t)) :: makeCondExtList(b)
-        case _ => throw new RuntimeException("7")
+        case _ => throw new CustomParseException("Wrong Branch format")
 
       }
     }
@@ -156,19 +159,19 @@ package object basicInterpreter {
         case SSym("nil") => NilExt()
         case SList(list) => {
           list match {
-            case Nil => throw new RuntimeException("1")
+            case Nil => throw new CustomParseException("Empty Expression List")
             case SSym("if") :: c :: t :: e :: Nil => IfExt(parse(c), parse(t), parse(e)) //?
             case SSym("cond") :: branches => {
 
               branches match {
-                case Nil => throw new RuntimeException("2")
+                case Nil => throw new CustomParseException("Nothing after Cond")
                 case _ => {
                   branches.last match {
                     case SList(SSym("else") :: e :: Nil) => {
                       makeCondEExt(makeCondEExtList(branches), parse(e))
                     }
                     case SList(c :: t :: Nil) => CondExt(makeCondExtList(branches))
-                    case _ => throw new RuntimeException("4")
+                    case _ => throw new CustomParseException("Wrong Branch format")
                   }
                 }
               }
@@ -184,11 +187,10 @@ package object basicInterpreter {
 
             case SSym(s) :: e :: Nil => UnOpExt(s, parse(e))
             case SSym(s) :: l :: r :: Nil => BinOpExt(s, parse(l), parse(r))
-            case _ => throw new RuntimeException("8")
-
+            case _ => throw new CustomParseException("Wrong Operation format")
           }
         }
-        case _ => throw new RuntimeException("9")
+        case _ => throw new CustomParseException("Wrong Syntax")
 
       }
     }
@@ -218,7 +220,9 @@ package object basicInterpreter {
             case "num=" => EqNumC(desugar(l), desugar(r))
             case "num<" => LtC(desugar(l), desugar(r))
             case "num>" => LtC(desugar(r), desugar(l))
+
             case "cons" => ConsC(desugar(l), desugar(r))
+
           }
         }
         case UnOpExt(s, e) => {
@@ -230,13 +234,15 @@ package object basicInterpreter {
             case "head" => HeadC(desugar(e))
             case "tail" => TailC(desugar(e))
             case "is-nil" => IsNilC(desugar(e))
-            case "Is-list" => IsListC(desugar(e))
+            case "is-list" => IsListC(desugar(e))
           }
         }
         case IfExt(c, t, e) => IfC(desugar(c), desugar(t), desugar(e))
+
         case ListExt(l) => {
           l match {
-            case Nil => NilC()
+            case Nil => throw new CustomDesugarException("nothing after list")
+            case NilExt() :: Nil => NilC()
             case e :: Nil => ConsC(desugar(e), NilC())
             case e :: b => ConsC(desugar(e), desugar(ListExt(b)))
           }
@@ -245,17 +251,17 @@ package object basicInterpreter {
         case CondExt(l) => {
           condExtDesugar(l)
         }
-        case CondEExt(l , e) => condEExtDesugar(l , e)
+        case CondEExt(l, e) => condEExtDesugar(l, e)
         case _ => UndefinedC()
       }
 
     }
 
-    def condEExtDesugar(list: List[(ExprExt, ExprExt)] , e:ExprExt): ExprC = {
+    def condEExtDesugar(list: List[(ExprExt, ExprExt)], e: ExprExt): ExprC = {
       list match {
         case Nil => NilC()
-        case (c , t) :: Nil => desugar(e)
-        case (c, t) :: f => IfC(desugar(c), desugar(t), condEExtDesugar(f , e))
+        case (c, t) :: Nil => desugar(e)
+        case (c, t) :: f => IfC(desugar(c), desugar(t), condEExtDesugar(f, e))
       }
     }
 
@@ -292,25 +298,27 @@ package object basicInterpreter {
           BoolV(getIntValue(interp(l)) < getIntValue(interp(r)))
         }
         case NilC() => NilV()
+
         case ConsC(l, r) => ConsV(interp(l), interp(r))
+
         case HeadC(e) => {
           e match {
-            // case NilC() => NilV()
             case ConsC(l, r) => interp(l)
-            // case _ =>
+            case _ => throw new CustomInterpException("head with not list")
           }
         }
+
         case TailC(e) => {
           e match {
-            // case NilC() => NilV()
-            case ConsC(l, r) => interp(e)
-            // case _ =>
+            case ConsC(l, r) => interp(r)
+            case _ => throw new CustomInterpException("tail with not list")
           }
         }
         case IsNilC(e) => {
           interp(e) match {
             case NilV() => BoolV(true)
-            case _ => BoolV(false)
+            case ConsV(h, t) => BoolV(false)
+            case _ => throw new CustomInterpException("is-nil with not list")
           }
         }
         case IsListC(e) => {
@@ -326,7 +334,7 @@ package object basicInterpreter {
     def getIntValue(v: Value): Int = {
       v match {
         case NumV(n) => n
-        // case _ => throw InterpException()
+        case _ => throw new CustomInterpException("Not a number")
       }
     }
   }
