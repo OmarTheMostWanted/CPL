@@ -33,6 +33,11 @@ package object basicInterpreter {
 
   case class NilExt() extends ExprExt
 
+  case class CondExt(cs: List[(ExprExt, ExprExt)]) extends ExprExt
+
+  case class CondEExt(cs: List[(ExprExt, ExprExt)], e: ExprExt) extends ExprExt
+
+
   object ExprExt {
     val binOps = Set("+", "*", "-", "and", "or", "num=", "num<", "num>", "cons")
     val unOps = Set("-", "not", "head", "tail", "is-nil", "is-list")
@@ -84,11 +89,11 @@ package object basicInterpreter {
   case class ConsV(head: Value, tail: Value) extends Value
 
   //exceptions
-  abstract class ParseException(msg: String = null)
+  class ParseException(msg: String = null) extends Exception
 
-  abstract class DesugarException(msg: String = null)
+  class DesugarException(msg: String = null) extends RuntimeException
 
-  abstract class InterpException(msg: String = null)
+  abstract class InterpException(msg: String = null) extends RuntimeException
 
   case class NotImplementedException(s: String) extends RuntimeException(s)
 
@@ -117,35 +122,78 @@ package object basicInterpreter {
   }
 
   object Parser {
+
+    def makeCondEExtList(list: List[SExpr]): List[(ExprExt, ExprExt)] = {
+      list match {
+        case SList(SSym("else") :: e :: Nil) :: Nil => Nil
+        case SList(c :: t :: Nil) :: b => (parse(c), parse(t)) :: makeCondEExtList(b)
+        case _ => throw new RuntimeException("3")
+      }
+    }
+
+    def makeCondEExt(list: List[(ExprExt, ExprExt)], exprExt: ExprExt): CondEExt = {
+      CondEExt(list, exprExt)
+    }
+
+    def makeCondExtList(list: List[SExpr]): List[(ExprExt, ExprExt)] = {
+      list match {
+        case Nil => throw new RuntimeException("6")
+        case SList(c :: t :: Nil) :: Nil => (parse(c), parse(t)) :: Nil
+        case SList(c :: t :: Nil) :: b => (parse(c), parse(t)) :: makeCondExtList(b)
+        case _ => throw new RuntimeException("7")
+
+      }
+    }
+
+
     def parse(str: String): ExprExt = parse(Reader.read(str))
 
     def parse(sexpr: SExpr): ExprExt = {
       sexpr match {
         case SNum(num) => NumExt(num)
+        case SSym("true") => TrueExt()
+        case SSym("false") => FalseExt()
+        case SSym("nil") => NilExt()
         case SList(list) => {
           list match {
-            case Nil => throw new RuntimeException()
+            case Nil => throw new RuntimeException("1")
             case SSym("if") :: c :: t :: e :: Nil => IfExt(parse(c), parse(t), parse(e)) //?
-//            case SSym("cond") :: branchs => {
-//              branchs match {
-//                case Nil => throw new RuntimeException()
-//
-//              }
-//            }
-//            case SSym("list") :: l => {
-//              l match {
-//                case Nil => throw new RuntimeException()
-//                case a :: Nil => ListExt
-//                case a :: b :: c => ListExt(parse(a) :: parse(b))
-//              }
-//            }
+            case SSym("cond") :: branches => {
+
+              branches match {
+                case Nil => throw new RuntimeException("2")
+                case _ => {
+                  branches.last match {
+                    case SList(SSym("else") :: e :: Nil) => {
+                      makeCondEExt(makeCondEExtList(branches), parse(e))
+                    }
+                    case SList(c :: t :: Nil) => CondExt(makeCondExtList(branches))
+                    case _ => throw new RuntimeException("4")
+                  }
+                }
+              }
+            }
+
+            case SSym("list") :: list => {
+              list match {
+                case Nil => NilExt()
+                case a :: Nil => parse(a)
+                case _ => ListExt(list.map(e => parse(e)))
+              }
+            }
+
             case SSym(s) :: e :: Nil => UnOpExt(s, parse(e))
             case SSym(s) :: l :: r :: Nil => BinOpExt(s, parse(l), parse(r))
+            case _ => throw new RuntimeException("8")
+
           }
         }
+        case _ => throw new RuntimeException("9")
+
       }
     }
   }
+
 
   object Desugar {
     def desugar(e: ExprExt): ExprC = {
@@ -194,13 +242,33 @@ package object basicInterpreter {
           }
         }
         case NilExt() => NilC()
-        // case CondExt(l) =>
-        // case CondEExt(l) =>
+        case CondExt(l) => {
+          condExtDesugar(l)
+        }
+        case CondEExt(l , e) => condEExtDesugar(l , e)
         case _ => UndefinedC()
       }
 
     }
+
+    def condEExtDesugar(list: List[(ExprExt, ExprExt)] , e:ExprExt): ExprC = {
+      list match {
+        case Nil => NilC()
+        case (c , t) :: Nil => desugar(e)
+        case (c, t) :: f => IfC(desugar(c), desugar(t), condEExtDesugar(f , e))
+      }
+    }
+
+
+    def condExtDesugar(list: List[(ExprExt, ExprExt)]): ExprC = {
+      list match {
+        case Nil => NilC()
+        case (c, t) :: Nil => IfC(desugar(c), desugar(t), UndefinedC())
+        case (c, t) :: e => IfC(desugar(c), desugar(t), condExtDesugar(e))
+      }
+    }
   }
+
 
   object Interp {
     def interp(e: ExprC): Value = {
